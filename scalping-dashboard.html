@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Silver Scalping Bot - Quick Trades</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 50%, #0f1428 100%);
+            color: #e8eaf6;
+            min-height: 100vh;
+            padding: 1rem;
+        }
+
+        .container { max-width: 1600px; margin: 0 auto; }
+
+        h1 {
+            font-size: clamp(1.8rem, 4vw, 2.5rem);
+            font-weight: 700;
+            background: linear-gradient(135deg, #60a5fa, #3b82f6, #8b5cf6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.5rem;
+        }
+
+        .subtitle { color: #94a3b8; margin-bottom: 1.5rem; font-size: 0.95rem; }
+
+        .alert-banner {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 9999;
+            padding: 1rem 1.5rem;
+            color: white;
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+            animation: slideDown 0.3s ease-out;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+            font-weight: 600;
+        }
+
+        .alert-banner.buy { background: linear-gradient(135deg, #059669, #10b981); }
+        .alert-banner.sell { background: linear-gradient(135deg, #dc2626, #ef4444); }
+        .alert-banner.show { display: flex; }
+
+        @keyframes slideDown {
+            from { transform: translateY(-100%); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.02); }
+        }
+
+        @keyframes glow {
+            0%, 100% { box-shadow: 0 0 10px rgba(59, 130, 246, 0.3); }
+            50% { box-shadow: 0 0 25px rgba(59, 130, 246, 0.6); }
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .stat-card {
+            background: rgba(30, 41, 59, 0.5);
+            border: 1px solid rgba(100, 116, 139, 0.3);
+            border-radius: 12px;
+            padding: 1rem;
+            backdrop-filter: blur(10px);
+        }
+
+        .stat-card.active {
+            animation: glow 2s ease-in-out infinite;
+            border-color: #3b82f6;
+        }
+
+        .stat-label { color: #94a3b8; margin-bottom: 0.5rem; font-size: 0.85rem; }
+        .stat-value { font-size: 1.8rem; font-weight: 700; margin-bottom: 0.3rem; }
+        .stat-change { display: flex; align-items: center; gap: 0.4rem; font-weight: 600; font-size: 0.9rem; }
+
+        .signal-buy { color: #10b981; }
+        .signal-sell { color: #ef4444; }
+        .signal-hold { color: #f59e0b; }
+
+        .chart-container {
+            background: rgba(30, 41, 59, 0.5);
+            border: 1px solid rgba(100, 116, 139, 0.3);
+            border-radius: 12px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .chart {
+            width: 100%;
+            height: 250px;
+            background: rgba(15, 23, 42, 0.5);
+            border-radius: 8px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        canvas { width: 100%; height: 100%; }
+
+        .trade-setup {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .setup-card {
+            background: rgba(30, 41, 59, 0.5);
+            border: 1px solid rgba(100, 116, 139, 0.3);
+            border-radius: 12px;
+            padding: 1.5rem;
+        }
+
+        .setup-card.buy-setup {
+            border: 2px solid rgba(16, 185, 129, 0.5);
+            background: rgba(16, 185, 129, 0.05);
+        }
+
+        .setup-card.sell-setup {
+            border: 2px solid rgba(239, 68, 68, 0.5);
+            background: rgba(239, 68, 68, 0.05);
+        }
+
+        .setup-title {
+            font-size: 1.3rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .setup-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid rgba(100, 116, 139, 0.2);
+        }
+
+        .setup-row:last-child { border-bottom: none; }
+
+        .alerts-list {
+            background: rgba(30, 41, 59, 0.5);
+            border: 1px solid rgba(100, 116, 139, 0.3);
+            border-radius: 12px;
+            padding: 1rem;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .alert-item {
+            padding: 0.8rem;
+            margin-bottom: 0.6rem;
+            border-radius: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            font-size: 0.9rem;
+        }
+
+        .alert-item.buy {
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .alert-item.sell {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .btn {
+            padding: 0.6rem 1.2rem;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 0.9rem;
+        }
+
+        .btn-sound {
+            background: rgba(100, 116, 139, 0.3);
+            color: white;
+        }
+
+        .btn-sound.active {
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
+        }
+
+        .indicators {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1rem;
+            background: rgba(30, 41, 59, 0.5);
+            border: 1px solid rgba(100, 116, 139, 0.3);
+            border-radius: 12px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .indicator { padding: 0.8rem; }
+
+        .indicator-label {
+            color: #94a3b8;
+            font-size: 0.85rem;
+            margin-bottom: 0.4rem;
+        }
+
+        .indicator-value {
+            font-size: 1.3rem;
+            font-weight: 600;
+        }
+
+        .scalping-info {
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            border-radius: 12px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+            font-size: 0.9rem;
+        }
+
+        .profit-target {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #10b981;
+        }
+
+        .loss-target {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #ef4444;
+        }
+
+        @media (max-width: 768px) {
+            body { padding: 0.5rem; }
+            .stat-value { font-size: 1.5rem; }
+            .setup-title { font-size: 1.1rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="alert-banner" id="alertBanner">
+        <div id="alertMessage"></div>
+        <button onclick="closeAlert()" style="background: rgba(255,255,255,0.2); border: none; color: white; padding: 0.5rem; border-radius: 4px; cursor: pointer; font-size: 1.2rem;">✕</button>
+    </div>
+
+    <div class="container">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem;">
+            <div>
+                <h1>⚡ SILVER SCALPING BOT</h1>
+                <p class="subtitle">Quick £50 Trades • 2-3% Threshold • 5-30 Min Hold Time</p>
+            </div>
+            <button class="btn btn-sound active" id="soundBtn" onclick="toggleSound()">🔊 Sound ON</button>
+        </div>
+
+        <div class="scalping-info">
+            <strong>💡 Scalping Strategy:</strong> Position Size: £50 | Target Profit: £2-3 (4-6%) | Stop Loss: £1.50 (3%) | Hold: 5-30 mins | 
+            Trade 2-3 star signals | Best hours: 8-10am, 1-5pm GMT
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card" id="priceCard">
+                <div class="stat-label">Current Price</div>
+                <div class="stat-value" id="currentPrice">$84.720</div>
+                <div class="stat-change" id="priceChange">
+                    <span>↗</span>
+                    <span>+0.00%</span>
+                </div>
+            </div>
+
+            <div class="stat-card" id="signalCard">
+                <div class="stat-label">Signal (Scalp)</div>
+                <div class="stat-value signal-hold" id="signal">HOLD</div>
+                <div style="color: #f59e0b; font-size: 0.9rem;" id="strength">☆☆☆</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-label">RSI (Fast)</div>
+                <div class="stat-value" id="rsi">50.00</div>
+                <div class="stat-label" id="rsiStatus" style="font-size: 0.8rem;">Neutral</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-label">Next Move</div>
+                <div class="stat-value" style="font-size: 1.5rem;" id="nextMove">WAIT</div>
+                <div class="stat-label" style="font-size: 0.8rem;" id="timeframe">Monitor...</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-label">Trades Today</div>
+                <div class="stat-value" id="tradesCount">0</div>
+                <div class="stat-label" style="font-size: 0.8rem;" id="winRate">Win rate: 0%</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-label">P&L Today</div>
+                <div class="stat-value" id="dailyPnL">£0.00</div>
+                <div class="stat-label" style="font-size: 0.8rem;" id="pnlStatus">Waiting for trades</div>
+            </div>
+        </div>
+
+        <div class="trade-setup">
+            <div class="setup-card buy-setup" id="buySetup">
+                <div class="setup-title">🟢 BUY SETUP (LONG)</div>
+                <div class="setup-row">
+                    <span>Entry Price:</span>
+                    <strong id="buyEntry">$84.50</strong>
+                </div>
+                <div class="setup-row">
+                    <span>Take Profit:</span>
+                    <strong class="profit-target" id="buyTarget">£3.00</strong>
+                </div>
+                <div class="setup-row">
+                    <span>TP Price:</span>
+                    <strong style="color: #10b981;" id="buyTPPrice">$85.04</strong>
+                </div>
+                <div class="setup-row">
+                    <span>Stop Loss:</span>
+                    <strong class="loss-target" id="buySL">-£1.50</strong>
+                </div>
+                <div class="setup-row">
+                    <span>SL Price:</span>
+                    <strong style="color: #ef4444;" id="buySLPrice">$84.23</strong>
+                </div>
+                <div class="setup-row">
+                    <span>Risk/Reward:</span>
+                    <strong style="color: #3b82f6;">1:2</strong>
+                </div>
+            </div>
+
+            <div class="setup-card sell-setup" id="sellSetup">
+                <div class="setup-title">🔴 SELL SETUP (SHORT)</div>
+                <div class="setup-row">
+                    <span>Entry Price:</span>
+                    <strong id="sellEntry">$84.50</strong>
+                </div>
+                <div class="setup-row">
+                    <span>Take Profit:</span>
+                    <strong class="profit-target" id="sellTarget">£3.00</strong>
+                </div>
+                <div class="setup-row">
+                    <span>TP Price:</span>
+                    <strong style="color: #10b981;" id="sellTPPrice">$83.96</strong>
+                </div>
+                <div class="setup-row">
+                    <span>Stop Loss:</span>
+                    <strong class="loss-target" id="sellSL">-£1.50</strong>
+                </div>
+                <div class="setup-row">
+                    <span>SL Price:</span>
+                    <strong style="color: #ef4444;" id="sellSLPrice">$84.77</strong>
+                </div>
+                <div class="setup-row">
+                    <span>Risk/Reward:</span>
+                    <strong style="color: #3b82f6;">1:2</strong>
+                </div>
+            </div>
+        </div>
+
+        <div class="chart-container">
+            <h2 style="margin-bottom: 1rem; font-size: 1.2rem;">Price Chart (5min scalping timeframe)</h2>
+            <div class="chart">
+                <canvas id="priceChart"></canvas>
+            </div>
+        </div>
+
+        <div class="indicators">
+            <div class="indicator">
+                <div class="indicator-label">MACD</div>
+                <div class="indicator-value" id="macd">0.000</div>
+            </div>
+            <div class="indicator">
+                <div class="indicator-label">SMA 20</div>
+                <div class="indicator-value" id="sma20">$84.50</div>
+            </div>
+            <div class="indicator">
+                <div class="indicator-label">Price vs SMA</div>
+                <div class="indicator-value" id="priceVsSma">+0.26%</div>
+            </div>
+            <div class="indicator">
+                <div class="indicator-label">Momentum</div>
+                <div class="indicator-value" id="momentum">Neutral</div>
+            </div>
+        </div>
+
+        <div class="alerts-list">
+            <h2 style="margin-bottom: 1rem; font-size: 1.2rem;">🔔 Scalping Alerts (<span id="alertCount">0</span>)</h2>
+            <div id="alertsList">
+                <p style="color: #94a3b8; text-align: center; padding: 1.5rem; font-size: 0.9rem;">
+                    Scanning for quick 2-3% moves... Alerts will appear here.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Scalping System - 2-3% threshold
+        let currentPrice = 84.72;
+        let priceHistory = [];
+        let alerts = [];
+        let soundEnabled = true;
+        let lastAlertTime = 0;
+        const ALERT_COOLDOWN = 30000; // 30 seconds for scalping
+        const SCALP_THRESHOLD = 2.5; // 2.5% threshold for scalping
+        const POSITION_SIZE = 50; // £50 per trade
+        const TARGET_PROFIT = 3; // £3 profit target (6%)
+        const STOP_LOSS = 1.5; // £1.50 stop loss (3%)
+        
+        let tradesCount = 0;
+        let winningTrades = 0;
+        let dailyPnL = 0;
+
+        // Initialize with realistic scalping price movement
+        for (let i = 0; i < 50; i++) {
+            currentPrice += (Math.random() - 0.5) * 0.15; // Smaller movements for scalping
+            priceHistory.push(parseFloat(currentPrice.toFixed(3)));
+        }
+
+        function calculateRSI(prices, period = 14) {
+            if (prices.length < period) return 50;
+            let gains = 0, losses = 0;
+            for (let i = 1; i < period; i++) {
+                const diff = prices[i] - prices[i - 1];
+                if (diff >= 0) gains += diff;
+                else losses -= diff;
+            }
+            const rs = (gains / period) / (losses / period);
+            return 100 - (100 / (1 + rs));
+        }
+
+        function calculateSMA(prices, period) {
+            if (prices.length < period) return prices[prices.length - 1] || 0;
+            const slice = prices.slice(-period);
+            return slice.reduce((sum, price) => sum + price, 0) / period;
+        }
+
+        function calculateMACD(prices) {
+            return calculateSMA(prices, 12) - calculateSMA(prices, 26);
+        }
+
+        function generateScalpSignal(rsi, macd, price, sma20) {
+            let signal = 'HOLD', strength = 0;
+            
+            // Scalping is more sensitive
+            if (rsi < 45) { signal = 'BUY'; strength += 1; }
+            if (rsi < 35) { strength += 1; }
+            if (rsi > 55) { signal = 'SELL'; strength += 1; }
+            if (rsi > 65) { strength += 1; }
+            
+            const priceVsSma = ((price - sma20) / sma20) * 100;
+            if (Math.abs(priceVsSma) >= SCALP_THRESHOLD) {
+                strength += 1;
+                if (signal === 'HOLD') signal = priceVsSma < 0 ? 'BUY' : 'SELL';
+            }
+            
+            if (macd > 0 && signal === 'BUY') strength += 1;
+            if (macd < 0 && signal === 'SELL') strength += 1;
+            
+            return { signal, strength: Math.min(strength, 3) };
+        }
+
+        function playSound(type) {
+            if (!soundEnabled) return;
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.frequency.value = type === 'buy' ? 900 : 350;
+            osc.type = 'sine';
+            gain.gain.setValueAtTime(0.25, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+            osc.start(ctx.currentTime);
+            osc.stop(ctx.currentTime + 0.3);
+        }
+
+        function showAlert(message, type) {
+            const now = Date.now();
+            if (now - lastAlertTime < ALERT_COOLDOWN) return;
+            lastAlertTime = now;
+
+            const banner = document.getElementById('alertBanner');
+            const msgEl = document.getElementById('alertMessage');
+            
+            msgEl.textContent = message;
+            banner.className = 'alert-banner ' + type + ' show';
+            
+            playSound(type);
+
+            alerts.unshift({
+                message,
+                type,
+                time: new Date().toLocaleTimeString()
+            });
+            if (alerts.length > 30) alerts.pop();
+            updateAlertsList();
+
+            setTimeout(() => {
+                banner.classList.remove('show');
+            }, 8000);
+        }
+
+        function closeAlert() {
+            document.getElementById('alertBanner').classList.remove('show');
+        }
+
+        function toggleSound() {
+            soundEnabled = !soundEnabled;
+            const btn = document.getElementById('soundBtn');
+            btn.textContent = soundEnabled ? '🔊 Sound ON' : '🔇 Sound OFF';
+            btn.className = 'btn btn-sound' + (soundEnabled ? ' active' : '');
+        }
+
+        function updateTradeSetups(current) {
+            const profitPercent = (TARGET_PROFIT / POSITION_SIZE) * 100;
+            const lossPercent = (STOP_LOSS / POSITION_SIZE) * 100;
+            
+            // BUY setup
+            const buyTP = current * (1 + profitPercent / 100);
+            const buySL = current * (1 - lossPercent / 100);
+            document.getElementById('buyEntry').textContent = `$${current.toFixed(2)}`;
+            document.getElementById('buyTarget').textContent = `£${TARGET_PROFIT.toFixed(2)}`;
+            document.getElementById('buyTPPrice').textContent = `$${buyTP.toFixed(2)}`;
+            document.getElementById('buySL').textContent = `-£${STOP_LOSS.toFixed(2)}`;
+            document.getElementById('buySLPrice').textContent = `$${buySL.toFixed(2)}`;
+            
+            // SELL setup
+            const sellTP = current * (1 - profitPercent / 100);
+            const sellSL = current * (1 + lossPercent / 100);
+            document.getElementById('sellEntry').textContent = `$${current.toFixed(2)}`;
+            document.getElementById('sellTarget').textContent = `£${TARGET_PROFIT.toFixed(2)}`;
+            document.getElementById('sellTPPrice').textContent = `$${sellTP.toFixed(2)}`;
+            document.getElementById('sellSL').textContent = `-£${STOP_LOSS.toFixed(2)}`;
+            document.getElementById('sellSLPrice').textContent = `$${sellSL.toFixed(2)}`;
+        }
+
+        function updateUI() {
+            const current = priceHistory[priceHistory.length - 1];
+            const previous = priceHistory[priceHistory.length - 2] || current;
+            const change = ((current - previous) / previous * 100).toFixed(2);
+            
+            const rsi = calculateRSI(priceHistory);
+            const macd = calculateMACD(priceHistory);
+            const sma20 = calculateSMA(priceHistory, 20);
+            const { signal, strength } = generateScalpSignal(rsi, macd, current, sma20);
+            
+            // Update price
+            document.getElementById('currentPrice').textContent = `$${current.toFixed(3)}`;
+            const changeEl = document.getElementById('priceChange');
+            changeEl.innerHTML = `<span>${change >= 0 ? '↗' : '↘'}</span><span>${change >= 0 ? '+' : ''}${change}%</span>`;
+            changeEl.style.color = change >= 0 ? '#10b981' : '#ef4444';
+            
+            // Update signal
+            const signalEl = document.getElementById('signal');
+            signalEl.textContent = signal;
+            signalEl.className = 'stat-value signal-' + signal.toLowerCase();
+            document.getElementById('strength').textContent = '★'.repeat(strength) + '☆'.repeat(3 - strength);
+            
+            const signalCard = document.getElementById('signalCard');
+            signalCard.className = strength >= 2 ? 'stat-card active' : 'stat-card';
+            
+            // Update RSI
+            document.getElementById('rsi').textContent = rsi.toFixed(1);
+            const rsiStatus = rsi < 40 ? '🟢 Scalp BUY' : rsi > 60 ? '🔴 Scalp SELL' : 'Neutral';
+            document.getElementById('rsiStatus').textContent = rsiStatus;
+            document.getElementById('rsiStatus').style.color = rsi < 40 ? '#10b981' : rsi > 60 ? '#ef4444' : '#94a3b8';
+            
+            // Update next move
+            const nextMove = strength >= 2 ? signal : 'WAIT';
+            document.getElementById('nextMove').textContent = nextMove;
+            document.getElementById('nextMove').style.color = signal === 'BUY' ? '#10b981' : signal === 'SELL' ? '#ef4444' : '#f59e0b';
+            document.getElementById('timeframe').textContent = strength >= 2 ? '⚡ Trade now!' : 'Wait for setup...';
+            
+            // Update indicators
+            document.getElementById('macd').textContent = macd.toFixed(3);
+            document.getElementById('macd').style.color = macd > 0 ? '#10b981' : '#ef4444';
+            document.getElementById('sma20').textContent = `$${sma20.toFixed(2)}`;
+            const priceVsSma = ((current - sma20) / sma20 * 100).toFixed(2);
+            document.getElementById('priceVsSma').textContent = `${priceVsSma >= 0 ? '+' : ''}${priceVsSma}%`;
+            document.getElementById('priceVsSma').style.color = priceVsSma >= 0 ? '#10b981' : '#ef4444';
+            
+            // Momentum
+            const recentTrend = priceHistory.slice(-5).reduce((sum, p, i, arr) => {
+                if (i === 0) return 0;
+                return sum + (arr[i] > arr[i-1] ? 1 : -1);
+            }, 0);
+            const momentum = recentTrend > 2 ? 'Up ↗' : recentTrend < -2 ? 'Down ↘' : 'Flat →';
+            document.getElementById('momentum').textContent = momentum;
+            document.getElementById('momentum').style.color = recentTrend > 2 ? '#10b981' : recentTrend < -2 ? '#ef4444' : '#94a3b8';
+            
+            // Update trade setups
+            updateTradeSetups(current);
+            
+            // Update stats
+            document.getElementById('tradesCount').textContent = tradesCount;
+            const winRate = tradesCount > 0 ? ((winningTrades / tradesCount) * 100).toFixed(0) : 0;
+            document.getElementById('winRate').textContent = `Win rate: ${winRate}%`;
+            document.getElementById('dailyPnL').textContent = `£${dailyPnL.toFixed(2)}`;
+            document.getElementById('dailyPnL').style.color = dailyPnL >= 0 ? '#10b981' : '#ef4444';
+            document.getElementById('pnlStatus').textContent = dailyPnL > 0 ? 'Profitable! 🎯' : dailyPnL < 0 ? 'In drawdown' : 'Break even';
+            
+            // Scalping alerts (2-3% moves)
+            if (strength >= 2) {
+                showAlert(
+                    `⚡ SCALP ${signal}! Entry: $${current.toFixed(2)} | Target: £${TARGET_PROFIT} | Stop: £${STOP_LOSS} | RSI: ${rsi.toFixed(0)}`,
+                    signal.toLowerCase()
+                );
+            }
+            
+            if (Math.abs(priceVsSma) >= SCALP_THRESHOLD) {
+                showAlert(
+                    `🎯 ${priceVsSma < 0 ? 'BUY' : 'SELL'} DIP! Price ${priceVsSma}% from SMA20. Quick scalp opportunity!`,
+                    priceVsSma < 0 ? 'buy' : 'sell'
+                );
+            }
+            
+            drawChart();
+        }
+
+        function drawChart() {
+            const canvas = document.getElementById('priceChart');
+            const ctx = canvas.getContext('2d');
+            const rect = canvas.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+            
+            const prices = priceHistory.slice(-50);
+            const min = Math.min(...prices) * 0.998;
+            const max = Math.max(...prices) * 1.002;
+            const width = canvas.width;
+            const height = canvas.height;
+            const step = width / (prices.length - 1);
+            
+            // Draw grid
+            ctx.strokeStyle = 'rgba(100, 116, 139, 0.2)';
+            ctx.lineWidth = 1;
+            for (let i = 0; i < 5; i++) {
+                const y = (height / 4) * i;
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(width, y);
+                ctx.stroke();
+            }
+            
+            // Draw SMA20
+            const sma20 = calculateSMA(prices, 20);
+            const smaY = height - ((sma20 - min) / (max - min)) * height;
+            ctx.strokeStyle = 'rgba(251, 191, 36, 0.5)';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([5, 5]);
+            ctx.beginPath();
+            ctx.moveTo(0, smaY);
+            ctx.lineTo(width, smaY);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            
+            // Draw price line
+            ctx.strokeStyle = '#3b82f6';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            prices.forEach((price, i) => {
+                const x = i * step;
+                const y = height - ((price - min) / (max - min)) * height;
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            });
+            ctx.stroke();
+            
+            // Draw last price point
+            const lastX = (prices.length - 1) * step;
+            const lastY = height - ((prices[prices.length - 1] - min) / (max - min)) * height;
+            ctx.fillStyle = '#3b82f6';
+            ctx.beginPath();
+            ctx.arc(lastX, lastY, 4, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function updateAlertsList() {
+            const list = document.getElementById('alertsList');
+            document.getElementById('alertCount').textContent = alerts.length;
+            
+            if (alerts.length === 0) {
+                list.innerHTML = '<p style="color: #94a3b8; text-align: center; padding: 1.5rem; font-size: 0.9rem;">Scanning for quick 2-3% moves... Alerts will appear here.</p>';
+                return;
+            }
+            
+            list.innerHTML = alerts.map(alert => `
+                <div class="alert-item ${alert.type}">
+                    <div style="flex: 1;">${alert.message}</div>
+                    <div style="color: #94a3b8; font-size: 0.85rem; white-space: nowrap;">${alert.time}</div>
+                </div>
+            `).join('');
+        }
+
+        // Simulate trades
+        function simulateTrade() {
+            if (Math.random() > 0.4) { // 60% win rate simulation
+                const profit = TARGET_PROFIT + (Math.random() * 0.5 - 0.25);
+                dailyPnL += profit;
+                winningTrades++;
+            } else {
+                const loss = STOP_LOSS + (Math.random() * 0.2);
+                dailyPnL -= loss;
+            }
+            tradesCount++;
+        }
+
+        function updatePrice() {
+            // Smaller price movements for scalping (0.1-0.3%)
+            const change = (Math.random() - 0.5) * 0.25;
+            currentPrice += change;
+            priceHistory.push(parseFloat(currentPrice.toFixed(3)));
+            if (priceHistory.length > 100) priceHistory.shift();
+            
+            // Simulate occasional trades
+            if (Math.random() > 0.95) simulateTrade();
+            
+            updateUI();
+        }
+
+        // Start - Update every 3 seconds for scalping (faster than swing trading)
+        updateUI();
+        setInterval(updatePrice, 3000);
+        
+        console.log('Silver Scalping Bot - Running (2.5% Threshold, £50 trades)');
+    </script>
+</body>
+</html>
